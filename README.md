@@ -90,4 +90,4 @@ python scripts/data_collection.py
 ## 6. 联系方式
 
 - **GitHub**: [disminde](https://github.com/disminde)
-- **Email**: (请在此处补充您的联系邮箱)
+- **Email**: lmingrui220@gmail.com
