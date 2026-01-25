@@ -64,6 +64,54 @@
 4.  **配置环境变量**
     复制 `.env.example` 为 `.env`，并配置数据库连接信息及API参数。
 
+### Docker配置
+1. 确保已安装Docker和Docker Compose
+2. 构建并启动Docker容器：
+   ```bash
+   docker-compose up -d --build
+   ```
+3. 停止Docker容器：
+   ```bash
+   docker-compose down
+   ```
+
+### 数据库配置
+1. 数据库连接配置位于 `.env` 文件
+2. 环境变量配置：
+   - 创建 `.env` 文件（参考 `.env.example`）并配置以下变量：
+     ```properties
+     POSTGRES_HOST=localhost
+     POSTGRES_PORT=5432
+     POSTGRES_DB=gra_env_db
+     POSTGRES_USER=admin
+     POSTGRES_PASSWORD=your_password
+     ```
+3. 初始化数据库：
+   - 容器首次启动时会自动执行 `docker/postgres/init` 下的 SQL 脚本。
+   - 手动验证连接：
+     ```bash
+     python tests/test_db_connection.py
+     ```
+
+## 开发指南
+1. 启动开发服务器：
+   ```bash
+   streamlit run app.py
+   ```
+2. 运行测试：
+   ```bash
+   # 运行所有测试
+   python -m unittest discover tests
+   # 运行数据库连接测试
+   python tests/test_db_connection.py
+   ```
+
+## 部署说明
+1. 生产环境部署请使用Docker容器
+2. 确保所有环境变量已正确配置
+3. 数据库数据持久化：
+   - 数据存储在 Docker Volume `postgres_data` 中。
+
 ## 4. 运行指南
 
 ### 启动 Web 应用

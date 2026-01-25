@@ -17,7 +17,7 @@ gantt
 
     section 第一阶段：准备与数据工程
     环境搭建与Git初始化       :done,    p1, 2026-01-25, 3d
-    技术栈预研(Python/API)    :active,  p2, after p1, 5d
+    技术栈预研(Python/API)    :done,  p2, after p1, 5d
     数据采集脚本开发(Open-Meteo) :        p3, after p2, 7d
     数据清洗与偏差校正(QM算法)   :        p4, after p3, 10d
 
