@@ -42,7 +42,7 @@ def test_query(connection):
 
 if __name__ == "__main__":
     print("Waiting for database to be ready...")
-    # Simple retry logic
+    # 简单的重试逻辑
     max_retries = 5
     for i in range(max_retries):
         conn = create_connection()
