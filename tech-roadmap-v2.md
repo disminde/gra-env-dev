@@ -224,18 +224,18 @@ XGBoost是一种基于决策树的集成算法，通过梯度提升（Gradient B
 
 ### 5 参考文献
 参考文献
-[1] WANG L, et al. Spatiotemporal characteristics of drought in the North China Plain and its impact on winter wheat[J]. Agricultural Water Management, 2021. 
-[2] ZHANG D, et al. Integrated hydrological modeling of the North China Plain[J]. Hydrology and Earth System Sciences, 2013. 
-[3] LI Z, et al. Spatiotemporal drought characteristics during growing seasons of the winter wheat and summer maize in the North China Plain[J]. Theoretical and Applied Climatology, 2024. 
-[4] YANG P, et al. Identification and Spatiotemporal Migration Analysis of Groundwater Drought Events in the North China Plain[J]. Atmosphere, 2021. 
-[5] QIN Y, et al. Analysis of the spatial and temporal characteristics of drought in the North China Plain based on standardized precipitation evapotranspiration index[J]. Natural Hazards, 2015. 
-[6] BEGUERÍA S, et al. Standardized precipitation evapotranspiration index (SPEI) revisited: parameter fitting, evapotranspiration models, tools, datasets and drought monitoring[J]. International Journal of Climatology, 2014. 
-[7] VICENTE-SERRANO S M, et al. A Multiscalar Drought Index Sensitive to Global Warming: The Standardized Precipitation Evapotranspiration Index[J]. Journal of Climate, 2010. 
-[8] TIRIVAROMBO S, et al. Comparative analysis of drought indicated by the SPI and SPEI at various timescales[J]. Journal of Hydrology, 2018. 
-[9] XU K, et al. Drought monitoring and analysis in North China based on SPEI[J]. Acta Ecologica Sinica, 2015. 
-[10] FENG Y, et al. Drought Forecasting Using Random Forests Model at New South Wales, Australia[J]. Applied Sciences, 2020. 
-[11] DIKSHIT A, et al. Long lead time drought forecasting using machine learning in a changing climate[J]. Journal of Hydrology, 2020.
-[12] PRODHAN F A, et al. Projection of future drought and its impact on simulated crop yield over South Asia using ensemble machine learning approach[J]. Science of The Total Environment, 2022. 
-[13] AGHELPOUR P, et al. Drought prediction models driven by meteorological variables: A review[J]. Water Supply, 2023. 
-[14] SHEN R, et al. Construction of a Drought Monitoring Model Using Deep Learning Based on Multi-Source Remote Sensing Data[J]. Remote Sensing, 2019. 
-[15] STREAMLIT INC. Streamlit: The fastest way to build and share data apps[J]. Journal of Open Source Software, 2023.
+*   [1] WANG L, et al. Spatiotemporal characteristics of drought in the North China Plain and its impact on winter wheat[J]. Agricultural Water Management, 2021. 
+*   [2] ZHANG D, et al. Integrated hydrological modeling of the North China Plain[J]. Hydrology and Earth System Sciences, 2013. 
+*   [3] LI Z, et al. Spatiotemporal drought characteristics during growing seasons of the winter wheat and summer maize in the North China Plain[J]. Theoretical and Applied Climatology, 2024. 
+*   [4] YANG P, et al. Identification and Spatiotemporal Migration Analysis of Groundwater Drought Events in the North China Plain[J]. Atmosphere, 2021. 
+*   [5] QIN Y, et al. Analysis of the spatial and temporal characteristics of drought in the North China Plain based on standardized precipitation evapotranspiration index[J]. Natural Hazards, 2015.      
+*   [6] BEGUERÍA S, et al. Standardized precipitation evapotranspiration index (SPEI) revisited: parameter fitting, evapotranspiration models, tools, datasets and drought monitoring[J]. International Journal of Climatology, 2014. 
+*   [7] VICENTE-SERRANO S M, et al. A Multiscalar Drought Index Sensitive to Global Warming: The Standardized Precipitation Evapotranspiration Index[J]. Journal of Climate, 2010. 
+*   [8] TIRIVAROMBO S, et al. Comparative analysis of drought indicated by the SPI and SPEI at various timescales[J]. Journal of Hydrology, 2018. 
+*   [9] XU K, et al. Drought monitoring and analysis in North China based on SPEI[J]. Acta Ecologica Sinica, 2015. 
+*   [10] FENG Y, et al. Drought Forecasting Using Random Forests Model at New South Wales, Australia[J]. Applied Sciences, 2020. 
+*   [11] DIKSHIT A, et al. Long lead time drought forecasting using machine learning in a changing climate[J]. Journal of Hydrology, 2020.
+*   [12] PRODHAN F A, et al. Projection of future drought and its impact on simulated crop yield over South Asia using ensemble machine learning approach[J]. Science of The Total Environment, 2022. 
+*   [13] AGHELPOUR P, et al. Drought prediction models driven by meteorological variables: A review[J]. Water Supply, 2023. 
+*   [14] SHEN R, et al. Construction of a Drought Monitoring Model Using Deep Learning Based on Multi-Source Remote Sensing Data[J]. Remote Sensing, 2019. 
+*   [15] STREAMLIT INC. Streamlit: The fastest way to build and share data apps[J]. Journal of Open Source Software, 2023.
