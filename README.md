@@ -125,7 +125,7 @@ streamlit run app.py
 python scripts/data_collection.py
 ```
 
-## 5. 贡献指南
+## 5. 贡献指南（真的会有人贡献吗）
 
 欢迎提交 Issue 和 Pull Request！
 
