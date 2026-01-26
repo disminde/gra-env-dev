@@ -111,8 +111,10 @@ Open-Meteo API 是一个基于ERA5-Land再分析数据集的高性能接口。�
 
 #### 3.2.1 SPEI 指数计算
 标准化降水蒸散指数（SPEI）是本系统的核心预测目标。与仅考虑降水的SPI不同，SPEI结合了水分收入（降水）与支出（蒸散发），更适合变暖背景下的干旱监测。
-*   **PET计算**：利用Open-Meteo提供的气温、湿度、风速和辐射数据，基于FAO-56 Penman-Monteith公式计算参考作物蒸散发（$ET_0$）。
-    $$ET_0 = \frac{0.408\Delta(R_n - G) + \gamma \frac{900}{T+273} u_2 (e_s - e_a)}{\Delta + \gamma(1 + 0.34u_2)}$$
+*   **PET计算**：利用Open-Meteo提供的气温、湿度、风速和辐射数据，基于FAO-56 Penman-Monteith公式计算参考作物蒸散发（ $ET_0$ ）。
+        
+        $$ET_0 = \frac{0.408\Delta(R_n - G) + \gamma \frac{900}{T+273} u_2 (e_s - e_a)}{\Delta + \gamma(1 + 0.34u_2)}$$
+        
     该公式物理机制明确，精度优于仅依赖温度的Thornthwaite方法。
 *   **水分盈亏序列**：计算月降水量 $P$ 与潜在蒸散发 $PET$ 之差 $D = P - PET$。
 *   **分布拟合与标准化**：对累积的 $D$ 序列采用Log-Logistic概率分布进行拟合，并将累计概率转换为标准正态分布变量，即得SPEI值。系统将计算SPEI-1（气象干旱）、SPEI-3（农业干旱）、SPEI-12（水文干旱）等多尺度指数。
