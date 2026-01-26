@@ -3,65 +3,186 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather Data Visualization</title>
+    <title>NCP Drought Monitor Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        canvas { margin-bottom: 50px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f4f7f6; color: #333; }
+        .header { background-color: #2c3e50; color: #ecf0f1; padding: 20px; text-align: center; }
+        .container { max-width: 1200px; margin: 20px auto; padding: 20px; }
+        
+        .card { background: white; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); padding: 20px; margin-bottom: 20px; }
+        .card h2 { margin-top: 0; border-bottom: 2px solid #3498db; padding-bottom: 10px; color: #2c3e50; font-size: 1.2rem; }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+        .stat-box { background: #ecf0f1; padding: 15px; border-radius: 5px; text-align: center; }
+        .stat-value { font-size: 2rem; font-weight: bold; color: #27ae60; }
+        .stat-label { color: #7f8c8d; font-size: 0.9rem; }
+
+        .log-box { background: #2c3e50; color: #2ecc71; padding: 15px; border-radius: 5px; font-family: monospace; height: 300px; overflow-y: auto; white-space: pre-wrap; font-size: 0.9rem; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9rem; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #34495e; color: white; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+
+        .status-badge { display: inline-block; padding: 5px 10px; border-radius: 15px; font-size: 0.8rem; color: white; }
+        .status-running { background-color: #27ae60; }
+        .status-stopped { background-color: #e74c3c; }
+        
+        .refresh-btn { float: right; padding: 5px 15px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .refresh-btn:hover { background: #2980b9; }
     </style>
 </head>
 <body>
+    <div class="header">
+        <h1>NCP Drought Monitor - Data Engineering Dashboard</h1>
+        <p>华北平原干旱监测系统 - 数据工程看板</p>
+    </div>
+
     <div class="container">
-        <h1>Weather Data Visualization</h1>
         
-        <div>
-            <canvas id="weatherChart"></canvas>
+        <!-- Database Statistics -->
+        <div class="card">
+            <h2>
+                Database Statistics (Grid Weather Data)
+                <button class="refresh-btn" onclick="fetchStats()">Refresh</button>
+            </h2>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-value" id="total-records">Loading...</div>
+                    <div class="stat-label">Total Records</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="grid-points">Loading...</div>
+                    <div class="stat-label">Unique Grid Points</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="date-range">Loading...</div>
+                    <div class="stat-label">Time Range</div>
+                </div>
+            </div>
         </div>
 
-        <h2>Data Table</h2>
-        <table id="weatherTable">
-            <thead>
-                <tr>
-                    <th>Timestamp</th>
-                    <th>Temperature (°C)</th>
-                    <th>Humidity (%)</th>
-                    <th>Wind Speed (km/h)</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Data will be inserted here -->
-            </tbody>
-        </table>
+        <!-- Crawling Progress Log -->
+        <div class="card">
+            <h2>Crawler Live Log (tail -n 20)</h2>
+            <div class="log-box" id="crawler-log">
+                Waiting for logs...
+            </div>
+        </div>
+
+        <!-- Recent Data Preview -->
+        <div class="card">
+            <h2>Recent Grid Data Preview (Real-time from Open-Meteo)</h2>
+            <p>Displaying recent 50 records from `grid_weather_data`</p>
+            <div style="overflow-x: auto;">
+                <table id="weatherTable">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Lat / Lon</th>
+                            <th>Temp (°C)</th>
+                            <th>Precip (mm)</th>
+                            <th>ET0 (mm)</th>
+                            <th>Soil Moisture (m³/m³)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="card">
+             <h2>Data Visualization (Recent Batch)</h2>
+             <canvas id="weatherChart"></canvas>
+        </div>
+
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            fetch('/api/weather')
+            fetchStats();
+            fetchLogs();
+            fetchWeatherData();
+            
+            // Auto-refresh logs every 5 seconds
+            setInterval(fetchLogs, 5000);
+            // Auto-refresh stats every 10 seconds
+            setInterval(fetchStats, 10000);
+            // Auto-refresh data every 10 seconds
+            setInterval(fetchWeatherData, 10000);
+        });
+
+        function fetchStats() {
+            fetch('/api/grid_stats')
                 .then(response => response.json())
                 .then(data => {
+                    if (data.error) {
+                        console.error('Stats error:', data.error);
+                        return;
+                    }
+                    // Format numbers
+                    document.getElementById('total-records').innerText = data.total_records ? data.total_records.toLocaleString() : '0';
+                    document.getElementById('grid-points').innerText = data.grid_points ? data.grid_points.toLocaleString() : '0';
+                    
+                    if (data.min_date && data.max_date) {
+                        const min = new Date(data.min_date).toISOString().split('T')[0];
+                        const max = new Date(data.max_date).toISOString().split('T')[0];
+                        document.getElementById('date-range').innerText = `${min} to ${max}`;
+                    } else {
+                        document.getElementById('date-range').innerText = 'No Data';
+                    }
+                })
+                .catch(err => console.error('Failed to fetch stats:', err));
+        }
+
+        function fetchLogs() {
+            fetch('/api/fetch_log')
+                .then(response => response.json())
+                .then(data => {
+                    const logBox = document.getElementById('crawler-log');
+                    if (data.log) {
+                        logBox.innerText = data.log;
+                        logBox.scrollTop = logBox.scrollHeight; // Auto-scroll to bottom
+                    } else {
+                        logBox.innerText = "No logs available.";
+                    }
+                })
+                .catch(err => console.error('Failed to fetch logs:', err));
+        }
+
+        function fetchWeatherData() {
+            fetch('/api/grid_recent')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error('Data error:', data.error);
+                        return;
+                    }
                     renderTable(data);
                     renderChart(data);
                 })
-                .catch(error => console.error('Error fetching data:', error));
-        });
+                .catch(error => console.error('Error fetching weather data:', error));
+        }
 
         function renderTable(data) {
             const tbody = document.querySelector('#weatherTable tbody');
             tbody.innerHTML = '';
             
-            // Show only last 20 records to keep table short, or all? Let's show all but maybe scrollable?
-            // For now, let's show all, it's 96 records.
-            data.forEach(row => {
+            // Show first 10 of the recent 50
+            const recentData = data.slice(0, 10);
+            
+            recentData.forEach(row => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${new Date(row.timestamp).toLocaleString()}</td>
-                    <td>${row.temperature}</td>
-                    <td>${row.humidity}</td>
-                    <td>${row.wind_speed}</td>
+                    <td>${row.latitude.toFixed(2)} / ${row.longitude.toFixed(2)}</td>
+                    <td>${row.temperature ? row.temperature.toFixed(1) : '-'}</td>
+                    <td>${row.precipitation ? row.precipitation.toFixed(1) : '0'}</td>
+                    <td>${row.et0_fao_evapotranspiration ? row.et0_fao_evapotranspiration.toFixed(2) : '-'}</td>
+                    <td>${row.soil_moisture_0_to_7cm ? row.soil_moisture_0_to_7cm.toFixed(3) : '-'}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -69,11 +190,18 @@
 
         function renderChart(data) {
             const ctx = document.getElementById('weatherChart').getContext('2d');
-            const labels = data.map(row => new Date(row.timestamp).toLocaleString());
-            const temps = data.map(row => row.temperature);
-            const hums = data.map(row => row.humidity);
+            // Sort by timestamp for chart
+            const sortedData = [...data].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            
+            const labels = sortedData.map(row => new Date(row.timestamp).toLocaleString());
+            const temps = sortedData.map(row => row.temperature);
+            const precips = sortedData.map(row => row.precipitation);
 
-            new Chart(ctx, {
+            if (window.myChart) {
+                window.myChart.destroy();
+            }
+
+            window.myChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: labels,
@@ -84,13 +212,16 @@
                             borderColor: 'rgba(255, 99, 132, 1)',
                             backgroundColor: 'rgba(255, 99, 132, 0.2)',
                             yAxisID: 'y',
+                            tension: 0.4
                         },
                         {
-                            label: 'Humidity (%)',
-                            data: hums,
+                            label: 'Precipitation (mm)',
+                            data: precips,
                             borderColor: 'rgba(54, 162, 235, 1)',
                             backgroundColor: 'rgba(54, 162, 235, 0.2)',
                             yAxisID: 'y1',
+                            tension: 0.1,
+                            type: 'bar'
                         }
                     ]
                 },
@@ -106,14 +237,14 @@
                             type: 'linear',
                             display: true,
                             position: 'left',
+                            title: { display: true, text: 'Temperature (°C)' }
                         },
                         y1: {
                             type: 'linear',
                             display: true,
                             position: 'right',
-                            grid: {
-                                drawOnChartArea: false,
-                            },
+                            grid: { drawOnChartArea: false },
+                            title: { display: true, text: 'Precipitation (mm)' }
                         },
                     }
                 }

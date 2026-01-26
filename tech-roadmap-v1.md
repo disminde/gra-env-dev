@@ -13,7 +13,7 @@
 二、设计内容
 1 设计内容
 本系统旨在构建一个集气象数据自动采集、干旱指数计算、智能预测及可视化展示于一体的综合平台。设计内容涵盖以下三个核心层面：
-1.	数据层设计：构建支持多源异构气象数据的存储架构。设计高可用性的数据采集脚本，针对历史数据（RP5.ru）与实时数据（Open-Meteo API）分别建立批处理与增量更新通道，确保数据的完整性与时效性。
+1.	数据层设计：构建支持多源异构气象数据的存储架构。设计高可用性的数据采集脚本，针对历史数据（NOAA NCEI）与实时数据（Open-Meteo API）分别建立批处理与增量更新通道，确保数据的完整性与时效性。
 2.	逻辑运算层设计：核心算法库的设计。包括基于 Penman-Monteith 公式的潜在蒸散量（PET）计算模块、多尺度 SPEI 指数生成模块，以及基于随机森林（Random Forest）的时间序列预测模型。该层负责将原始气象要素转化为具有决策价值的干旱指标 。
 3.	应用表现层设计：交互式 Web 仪表盘的设计。依托 Streamlit 框架搭建用户界面，集成 ECharts 地理可视化组件，提供包含时空分布地图、趋势折线图及预测预警信息的动态展示窗口 。
 2 总体技术路线
@@ -23,7 +23,7 @@
 •	模型策略：针对华北平原的非线性气候特征，技术路线放弃传统的线性回归，选择集成学习算法（随机森林）。通过构造“时间滞后特征”（Lag Features），将时间序列预测问题转化为监督学习问题，以提升对干旱突变的捕捉能力 。
 3 具体实现手段
 1.	数据采集与预处理：
-o	利用 Python 的 requests 库构建爬虫，针对 RP5.ru 进行历史数据抓取，并使用 BeautifulSoup 解析 HTML 结构 。
+o	利用 Python 的 requests 库构建爬虫，针对 NOAA NCEI 进行历史数据抓取，并使用 BeautifulSoup 解析 HTML 结构 。
 o	集成 Open-Meteo 开源 API，通过 httpx 异步请求获取每日最新的气温、湿度、风速等实况数据，作为 SPEI 计算的实时输入 。
 o	使用 Pandas 进行数据清洗，采用线性插值法填补缺失值，并利用 IQR（四分位距）法则剔除异常气象数据。
 2.	核心算法实现：
@@ -49,11 +49,11 @@ o	趋势预测：系统能以 80% 以上的准确率预测未来一个月的干�
 经过相关调研，以下是对数据源的详尽分析。
 
 1.1.1 灰盒数据源：Web爬虫目标
-RP5.ru (俄罗斯天气服务器)
-数据质量与权威性： RP5.ru 是气象学界和数据科学界公认的高质量数据源之一。它归档了全球各地的机场及气象站发布的METAR（气象终端航空例行天气报告）和SYNOP（地面天气报告）数据。对于中国区域，它覆盖了大量国家级气象站点 。
+NOAA NCEI (美国国家环境信息中心)
+数据质量与权威性： NOAA NCEI 是气象学界和数据科学界公认的高质量数据源之一。它归档了全球各地的机场及气象站发布的METAR（气象终端航空例行天气报告）和SYNOP（地面天气报告）数据。对于中国区域，它覆盖了大量国家级气象站点 。
 参数丰富度： 该网站提供的数据颗粒度极高，不仅包含基础的气温、降水，还包含相对湿度、气压、风速、风向、云量等关键参数。这对于计算Penman-Monteith公式下的潜在蒸散量（PET）至关重要，因为PET的计算不能仅依赖温度 。
-抓取可行性：RP5的网页结构相对老旧且稳定，不像现代动态网页那样充满复杂的JavaScript渲染，这使得利用Python的requests库配合BeautifulSoup进行解析变得非常容易。此外，Python社区已存在现成的开源库如weather-rp5  和GitHub项目rp5_weather，这些工具封装了站点ID查询、数据下载和解析的逻辑，极大地降低了开发成本。
-数据源应用定位： 历史数据主仓库。系统初始化时，应利用RP5抓取华北平原各站点过去30-50年的日值或小时值数据，用于SPEI模型的参数率定和随机森林模型的训练。
+抓取可行性：NOAA的网页结构相对老旧且稳定，不像现代动态网页那样充满复杂的JavaScript渲染，这使得利用Python的requests库配合BeautifulSoup进行解析变得非常容易。此外，Python社区已存在现成的开源库如NOAA tools 和GitHub项目noaa_weather，这些工具封装了站点ID查询、数据下载和解析的逻辑，极大地降低了开发成本。
+数据源应用定位： 历史数据主仓库。系统初始化时，应利用NOAA抓取华北平原各站点过去30-50年的日值或小时值数据，用于SPEI模型的参数率定和随机森林模型的训练。
 
 1.1.2 白盒数据源：开放API
 当前学术环境下，单纯依赖爬虫存在网页改版等风险，难度较高，数据源少，也不符合学术道德规范。故引入白盒数据源，即官方或开源社区维护的API是必要的保险措施。
@@ -70,7 +70,7 @@ Open-Meteo：
 1.2 数据采集与处理流水线设计
 综合上述分析，本系统将采用“历史批量导入 + 每日增量更新”的混合数据流水线架构。
 1.2.1.	历史数据初始化层：
-利用 weather-rp5 库或编写定制脚本，针对华北平原主要城市（北京、天津、石家庄、济南、郑州等）的气象站点，批量下载过去30年（如1990-2023）的逐日气象记录。
+利用 NOAA bulk download tools 库或编写定制脚本，针对华北平原主要城市（北京、天津、石家庄、济南、郑州等）的气象站点，批量下载过去30年（如1990-2023）的逐日气象记录。
 数据涵盖：日最高/最低气温、平均相对湿度、平均风速、日照时数（或辐射）、24小时降水量。
 1.2.2.	增量数据更新层：
 部署定时任务（Python Schedule库），每日凌晨（如02:00）执行。
@@ -79,7 +79,7 @@ Open-Meteo：
 1.2.3.	数据清洗与质控层：
 异常值检测： 设定物理阈值（如气温不可能高于50℃或低于-40℃，相对湿度介于0-100%等），剔除明显错误。
 缺失值插补： 对于短缺（<3天），采用线性插值；对于长缺，利用邻近站点数据建立回归关系进行插补，或使用NASA POWER的卫星数据填补。
-同化处理： 将不同来源的数据（RP5的CSV、API的JSON）统一格式化为标准的时间序列DataFrame（Pandas），并存入数据库。
+同化处理： 将不同来源的数据（NOAA的CSV、API的JSON）统一格式化为标准的时间序列DataFrame（Pandas），并存入数据库。
 1.2.4.	数据持久化层：
 初步开发阶段因单文件特性，部署极为简便，准备使用 SQLite
 生产阶段或数据量增大后，考虑迁移至 PostgreSQL，以利用其强大的时序数据处理能力。
@@ -128,7 +128,7 @@ Penman-Monteith (P-M) 法： 这是FAO（联合国粮农组织）推荐的标准
 1.	数据层: 
 包含 weather_data 表（存储原始日值）和 drought_analysis 表（存储计算后的SPEI和预测结果）。物理载体为 ncp_drought.db (SQLite文件)。
 2.	逻辑层:
-crawler_service.py: 封装针对RP5和Open-Meteo的请求逻辑，包含重试机制和异常处理。
+crawler_service.py: 封装针对NOAA和Open-Meteo的请求逻辑，包含重试机制和异常处理。
 model_engine.py: 封装 climate_indices 的SPEI计算函数和 sklearn 的随机森林预测类。
 3.	 表现层: 
 app.py (Streamlit主程序)，负责页面布局、控件响应和图表渲染。
@@ -153,7 +153,7 @@ t_min	FLOAT	最低温
 precip	FLOAT	降水量
 wind_speed	FLOAT	平均风速
 humidity	FLOAT	相对湿度
-source	VARCHAR	数据来源 (RP5/API)
+source	VARCHAR	数据来源 (NOAA/API)
 Table 3: spei_results (分析结果表)
 字段名	类型	说明
 station_id	VARCHAR	外键
@@ -183,3 +183,4 @@ is_predicted	BOOLEAN	是否为预测值
 [14] SHEN R, et al. Construction of a Drought Monitoring Model Using Deep Learning Based on Multi-Source Remote Sensing Data[J]. Remote Sensing, 2019. 
 [15] STREAMLIT INC. Streamlit: The fastest way to build and share data apps[J]. Journal of Open Source Software, 2023.
 
+---
