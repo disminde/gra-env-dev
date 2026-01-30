@@ -234,9 +234,15 @@ def fetch_grid_data(grid_points):
 
                 except Exception as e:
                     error_msg = str(e)
-                    if "Hourly API request limit exceeded" in error_msg or "429" in error_msg:
-                        wait_time = 60 * (retry_count + 1) # Linear backoff: 60s, 120s, ...
-                        logging.warning(f"Rate limit hit for year {year}. Waiting {wait_time}s before retry {retry_count + 1}/{max_retries}...")
+                    if "request limit exceeded" in error_msg or "429" in error_msg:
+                        # 区分分钟级限流和小时/日级限流
+                        if "Minutely" in error_msg:
+                             wait_time = 65 # 稍微多等一点，超过60秒
+                             logging.warning(f"Minutely rate limit hit for year {year}. Waiting {wait_time}s...")
+                        else:
+                             wait_time = 60 * (retry_count + 1) # Linear backoff for hourly/daily
+                             logging.warning(f"Hourly/Daily rate limit hit for year {year}. Waiting {wait_time}s before retry {retry_count + 1}/{max_retries}...")
+                        
                         time.sleep(wait_time)
                         retry_count += 1
                     else:

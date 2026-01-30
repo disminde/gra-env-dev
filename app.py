@@ -117,6 +117,8 @@ def get_grid_stats():
         app.logger.error(f"Error querying grid stats: {e}")
         return jsonify({"error": str(e)}), 500
 
+from collections import deque
+
 @app.route('/api/fetch_log')
 def get_fetch_log():
     """获取数据爬取日志的最后几行。"""
@@ -125,11 +127,12 @@ def get_fetch_log():
         return jsonify({"log": "Log file not found."})
         
     try:
-        with open(log_file, "r", encoding="utf-8") as f:
-            # 读取最后 20 行
-            lines = f.readlines()[-20:]
-            return jsonify({"log": "".join(lines)})
+        # 使用 deque 提高大文件读取效率
+        with open(log_file, "r", encoding="utf-8", errors='replace') as f:
+            last_lines = deque(f, 20)
+            return jsonify({"log": "".join(last_lines)})
     except Exception as e:
+        app.logger.error(f"Error reading log file: {e}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
