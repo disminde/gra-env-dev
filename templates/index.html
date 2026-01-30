@@ -85,6 +85,9 @@
                             <th>Precip (mm)</th>
                             <th>ET0 (mm)</th>
                             <th>Soil Moisture (m³/m³)</th>
+                            <th>Humidity (%)</th>
+                            <th>Wind (km/h)</th>
+                            <th>Radiation (W/m²)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -183,6 +186,9 @@
                     <td>${row.precipitation ? row.precipitation.toFixed(1) : '0'}</td>
                     <td>${row.et0_fao_evapotranspiration ? row.et0_fao_evapotranspiration.toFixed(2) : '-'}</td>
                     <td>${row.soil_moisture_0_to_7cm ? row.soil_moisture_0_to_7cm.toFixed(3) : '-'}</td>
+                    <td>${row.relative_humidity_2m ? row.relative_humidity_2m.toFixed(1) : '-'}</td>
+                    <td>${row.wind_speed_10m ? row.wind_speed_10m.toFixed(1) : '-'}</td>
+                    <td>${row.shortwave_radiation ? row.shortwave_radiation.toFixed(1) : '-'}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -196,6 +202,7 @@
             const labels = sortedData.map(row => new Date(row.timestamp).toLocaleString());
             const temps = sortedData.map(row => row.temperature);
             const precips = sortedData.map(row => row.precipitation);
+            const et0s = sortedData.map(row => row.et0_fao_evapotranspiration);
 
             if (window.myChart) {
                 window.myChart.destroy();
@@ -222,6 +229,15 @@
                             yAxisID: 'y1',
                             tension: 0.1,
                             type: 'bar'
+                        },
+                        {
+                            label: 'ET0 (mm)',
+                            data: et0s,
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            yAxisID: 'y1',
+                            tension: 0.4,
+                            borderDash: [5, 5]
                         }
                     ]
                 },
@@ -244,7 +260,7 @@
                             display: true,
                             position: 'right',
                             grid: { drawOnChartArea: false },
-                            title: { display: true, text: 'Precipitation (mm)' }
+                            title: { display: true, text: 'Precip/ET0 (mm)' }
                         },
                     }
                 }

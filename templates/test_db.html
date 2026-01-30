@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Test Page (Original)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f0f0f0; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Database Connection Test (Beijing Demo)</h1>
+        <p>This page shows data from the <code>weather_samples</code> table.</p>
+        
+        <canvas id="weatherChart" width="400" height="200"></canvas>
+
+        <table id="weatherTable">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Temperature (°C)</th>
+                    <th>Humidity (%)</th>
+                    <th>Wind Speed (km/h)</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        fetch('/api/weather')
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.querySelector('#weatherTable tbody');
+                const labels = [];
+                const temps = [];
+                const hums = [];
+
+                data.forEach(row => {
+                    const tr = document.createElement('tr');
+                    const date = new Date(row.timestamp).toLocaleString();
+                    tr.innerHTML = `
+                        <td>${date}</td>
+                        <td>${row.temperature}</td>
+                        <td>${row.humidity}</td>
+                        <td>${row.wind_speed}</td>
+                    `;
+                    tbody.appendChild(tr);
+
+                    labels.push(date);
+                    temps.push(row.temperature);
+                    hums.push(row.humidity);
+                });
+
+                const ctx = document.getElementById('weatherChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Temperature (°C)',
+                            data: temps,
+                            borderColor: 'rgb(255, 99, 132)',
+                            tension: 0.1
+                        }, {
+                            label: 'Humidity (%)',
+                            data: hums,
+                            borderColor: 'rgb(54, 162, 235)',
+                            tension: 0.1
+                        }]
+                    }
+                });
+            });
+    </script>
+</body>
+</html>

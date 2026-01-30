@@ -39,6 +39,10 @@ def get_db_connection():
 def index():
     return render_template('index.html')
 
+@app.route('/test')
+def test_page():
+    return render_template('test_db.html')
+
 @app.route('/api/weather')
 def get_weather():
     conn = get_db_connection()

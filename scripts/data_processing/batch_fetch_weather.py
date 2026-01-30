@@ -58,17 +58,36 @@ def create_grid_table(conn):
         precipitation FLOAT,
         et0_fao_evapotranspiration FLOAT,
         soil_moisture_0_to_7cm FLOAT,
+        relative_humidity_2m FLOAT,
+        wind_speed_10m FLOAT,
+        shortwave_radiation FLOAT,
         UNIQUE (latitude, longitude, timestamp)
     );
     """
     try:
         cur = conn.cursor()
         cur.execute(create_table_query)
+        # 检查是否需要添加新列（如果表已存在但缺少新变量）
+        new_columns = [
+            ("relative_humidity_2m", "FLOAT"),
+            ("wind_speed_10m", "FLOAT"),
+            ("shortwave_radiation", "FLOAT")
+        ]
+        for col_name, col_type in new_columns:
+            cur.execute(f"""
+                DO $$ 
+                BEGIN 
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                                   WHERE table_name='grid_weather_data' AND column_name='{col_name}') THEN
+                        ALTER TABLE grid_weather_data ADD COLUMN {col_name} {col_type};
+                    END IF;
+                END $$;
+            """)
         conn.commit()
-        logging.info("Table 'grid_weather_data' checked/created successfully.")
+        logging.info("Table 'grid_weather_data' checked/updated successfully.")
         cur.close()
     except Exception as e:
-        logging.error(f"Error creating table: {e}")
+        logging.error(f"Error creating/updating table: {e}")
         conn.rollback()
         raise
 
@@ -89,12 +108,6 @@ def fetch_grid_data(grid_points):
     # Process in chunks to avoid API limits (Open-Meteo accepts multiple points but keep it reasonable)
     # Reduced chunk size to avoid memory issues (was 50)
     chunk_size = 5 
-    
-    # --- FAST VERIFICATION MODE (User Requested) ---
-    # Only process first 5 points and last 1 year to verify pipeline quickly
-    logging.warning("RUNNING IN FAST VERIFICATION MODE: 5 points, 1 year only.")
-    grid_points = grid_points.head(5)
-    # -----------------------------------------------
 
     total_points = len(grid_points)
     print(f"DEBUG: Chunk size is {chunk_size}, Total points: {total_points}")
@@ -110,8 +123,7 @@ def fetch_grid_data(grid_points):
         logging.info(f"Processing grid points chunk {i//chunk_size + 1}/{(total_points-1)//chunk_size + 1} ({len(chunk)} points)...")
         
         # Iterate by year to keep memory usage low and provide frequent feedback
-        # FAST MODE: Only 2023
-        start_year = 2023
+        start_year = 1990
         end_year = 2023
         
         for year in range(start_year, end_year + 1):
@@ -129,7 +141,15 @@ def fetch_grid_data(grid_points):
                 "longitude": lons,
                 "start_date": year_start,
                 "end_date": year_end,
-                "hourly": ["temperature_2m", "precipitation", "et0_fao_evapotranspiration", "soil_moisture_0_to_7cm"]
+                "hourly": [
+                    "temperature_2m", 
+                    "precipitation", 
+                    "et0_fao_evapotranspiration", 
+                    "soil_moisture_0_to_7cm",
+                    "relative_humidity_2m",
+                    "wind_speed_10m",
+                    "shortwave_radiation"
+                ]
             }
             
             # Retry loop for API rate limits
@@ -154,6 +174,9 @@ def fetch_grid_data(grid_points):
                         hourly_precipitation = hourly.Variables(1).ValuesAsNumpy()
                         hourly_et0 = hourly.Variables(2).ValuesAsNumpy()
                         hourly_soil_moisture = hourly.Variables(3).ValuesAsNumpy()
+                        hourly_humidity = hourly.Variables(4).ValuesAsNumpy()
+                        hourly_wind_speed = hourly.Variables(5).ValuesAsNumpy()
+                        hourly_radiation = hourly.Variables(6).ValuesAsNumpy()
                         
                         hourly_data = {"date": pd.date_range(
                             start = pd.to_datetime(hourly.Time(), unit = "s", utc = True),
@@ -168,6 +191,9 @@ def fetch_grid_data(grid_points):
                         df["precipitation"] = hourly_precipitation
                         df["et0"] = hourly_et0
                         df["soil_moisture"] = hourly_soil_moisture
+                        df["humidity"] = hourly_humidity
+                        df["wind_speed"] = hourly_wind_speed
+                        df["radiation"] = hourly_radiation
                         
                         # Convert to list of tuples for DB insertion
                         # Use a generator or direct iteration to save memory
@@ -179,13 +205,20 @@ def fetch_grid_data(grid_points):
                                 float(row['temperature']), 
                                 float(row['precipitation']), 
                                 float(row['et0']), 
-                                float(row['soil_moisture'])
+                                float(row['soil_moisture']),
+                                float(row['humidity']),
+                                float(row['wind_speed']),
+                                float(row['radiation'])
                             ))
                     
                     # Batch insert for this year
                     if all_records:
                         insert_query = """
-                        INSERT INTO grid_weather_data (latitude, longitude, timestamp, temperature, precipitation, et0_fao_evapotranspiration, soil_moisture_0_to_7cm)
+                        INSERT INTO grid_weather_data (
+                            latitude, longitude, timestamp, temperature, precipitation, 
+                            et0_fao_evapotranspiration, soil_moisture_0_to_7cm,
+                            relative_humidity_2m, wind_speed_10m, shortwave_radiation
+                        )
                         VALUES %s
                         ON CONFLICT (latitude, longitude, timestamp) DO NOTHING;
                         """
