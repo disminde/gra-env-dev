@@ -9,6 +9,7 @@ from psycopg2.extras import RealDictCursor
 load_dotenv()
 
 app = Flask(__name__)
+app.config['JSON_AS_ASCII'] = False # 禁用 ASCII 转义，支持中文显示
 
 # 配置日志记录
 logging.basicConfig(level=logging.INFO)
