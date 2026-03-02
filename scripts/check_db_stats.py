@@ -1,75 +1,71 @@
 import psycopg2
 import os
 from dotenv import load_dotenv
-from tabulate import tabulate
+import pandas as pd
 
-# 加载环境变量
 load_dotenv()
 
-# 数据库配置
-DB_HOST = os.getenv("POSTGRES_HOST", "localhost")
-DB_PORT = os.getenv("POSTGRES_PORT", "5432")
-DB_NAME = os.getenv("POSTGRES_DB", "gra_env_db")
-DB_USER = os.getenv("POSTGRES_USER", "admin")
-DB_PASS = os.getenv("POSTGRES_PASSWORD", "secure_password_dev")
-
-def get_db_stats():
+def check_radiation_stats():
     try:
         conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=DB_PASS
+            host=os.getenv('POSTGRES_HOST', 'localhost'),
+            port=os.getenv('POSTGRES_PORT', '5432'),
+            user=os.getenv('POSTGRES_USER', 'admin'),
+            password=os.getenv('POSTGRES_PASSWORD', 'secure_password_dev'),
+            dbname=os.getenv('POSTGRES_DB', 'gra_env_db')
         )
-        cur = conn.cursor()
-
-        print("\n--- 数据库数据采集概况 ---\n")
-
-        # 1. 总体统计
-        cur.execute("SELECT COUNT(*) FROM grid_weather_data")
-        total_records = cur.fetchone()[0]
         
-        cur.execute("SELECT COUNT(DISTINCT (latitude, longitude)) FROM grid_weather_data")
-        total_grids = cur.fetchone()[0]
-
-        cur.execute("SELECT MIN(timestamp), MAX(timestamp) FROM grid_weather_data")
-        min_date, max_date = cur.fetchone()
-
-        summary_data = [
-            ["总记录数", f"{total_records:,}"],
-            ["已覆盖网格点数", total_grids],
-            ["数据起始时间", min_date],
-            ["数据截止时间", max_date]
-        ]
-        print(tabulate(summary_data, headers=["指标", "数值"], tablefmt="grid"))
-
-        # 2. 按年份统计
-        print("\n--- 按年份分布 ---\n")
+        # 1. 检查总行数
+        cur = conn.cursor()
+        cur.execute("SELECT count(*) FROM grid_weather_data;")
+        total_rows = cur.fetchone()[0]
+        print(f"Total rows: {total_rows}")
+        
+        # 2. 检查辐射为 NULL 的行数
+        cur.execute("SELECT count(*) FROM grid_weather_data WHERE shortwave_radiation IS NULL;")
+        null_rad = cur.fetchone()[0]
+        print(f"Radiation IS NULL: {null_rad} ({null_rad/total_rows*100:.2f}%)")
+        
+        # 3. 检查辐射为 0 的行数
+        cur.execute("SELECT count(*) FROM grid_weather_data WHERE shortwave_radiation = 0;")
+        zero_rad = cur.fetchone()[0]
+        print(f"Radiation = 0: {zero_rad} ({zero_rad/total_rows*100:.2f}%)")
+        
+        # 4. 检查白天 (10:00-14:00) 辐射为 0 的情况（这才是真正的问题）
         cur.execute("""
-            SELECT EXTRACT(YEAR FROM timestamp) as year, COUNT(*) as count 
+            SELECT count(*) 
             FROM grid_weather_data 
-            GROUP BY year 
-            ORDER BY year
+            WHERE shortwave_radiation = 0 
+            AND extract(hour from timestamp) BETWEEN 10 AND 14;
         """)
-        year_stats = cur.fetchall()
-        print(tabulate(year_stats, headers=["年份", "记录数"], tablefmt="grid"))
-
-        # 3. 按网格点统计 (前 5 个)
-        print("\n--- 网格点分布预览 (前 5 个) ---\n")
+        daytime_zero_rad = cur.fetchone()[0]
+        print(f"Daytime (10-14h) Radiation = 0: {daytime_zero_rad}")
+        
+        # 5. 检查 ET0 为 NULL 的情况
+        cur.execute("SELECT count(*) FROM grid_weather_data WHERE et0_fao_evapotranspiration IS NULL;")
+        null_et0 = cur.fetchone()[0]
+        print(f"ET0 IS NULL: {null_et0} ({null_et0/total_rows*100:.2f}%)")
+        
+        # 6. 按年份统计缺失率
+        print("\n--- Missing Radiation by Year ---")
         cur.execute("""
-            SELECT latitude, longitude, COUNT(*) as count 
-            FROM grid_weather_data 
-            GROUP BY latitude, longitude 
-            LIMIT 5
+            SELECT 
+                extract(year from timestamp) as year,
+                count(*) as total,
+                count(shortwave_radiation) as non_null_rad,
+                sum(case when shortwave_radiation is null then 1 else 0 end) as null_rad
+            FROM grid_weather_data
+            GROUP BY 1
+            ORDER BY 1;
         """)
-        grid_sample = cur.fetchall()
-        print(tabulate(grid_sample, headers=["纬度", "经度", "记录数"], tablefmt="grid"))
+        rows = cur.fetchall()
+        for row in rows:
+            print(f"Year {int(row[0])}: Total {row[1]}, Null Rad {row[3]}")
 
-        cur.close()
         conn.close()
+        
     except Exception as e:
-        print(f"查询出错: {e}")
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
-    get_db_stats()
+    check_radiation_stats()

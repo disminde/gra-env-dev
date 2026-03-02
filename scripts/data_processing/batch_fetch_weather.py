@@ -12,6 +12,7 @@ import requests_cache
 from retry_requests import retry
 import json
 import sys
+from tqdm import tqdm
 
 # --- 强制配置日志，确保在所有操作前生效 ---
 log_path = os.path.join(os.getcwd(), "batch_fetch.log")
@@ -26,23 +27,83 @@ logging.basicConfig(
 logging.info(f"日志系统启动，路径: {log_path}")
 
 # --- Clash API & Proxy 配置 ---
-CLASH_API_URL = "http://127.0.0.1:12531" 
-CLASH_SECRET = "44976f0a-414c-48b1-bda7-5759fef634d3" 
+# 配置更新时间: 2026-02-19 (根据用户本地 config.yaml 自动校准)
+# 优先从环境变量读取（用于隔离模式），否则使用默认值
+CLASH_API_URL = os.getenv("CLASH_API_URL", "http://127.0.0.1:10380")
+CLASH_SECRET = os.getenv("CLASH_SECRET", "44976f0a-414c-48b1-bda7-5759fef634d3")
 PROXY_GROUP_NAME = "猫猫云" 
-HTTP_PROXY_URL = "http://127.0.0.1:7890" 
+HTTP_PROXY_URL = os.getenv("HTTP_PROXY", "http://127.0.0.1:7890") 
 
 class ClashController:
     def __init__(self):
-        self.headers = {"Authorization": f"Bearer {CLASH_SECRET}"} if CLASH_SECRET else {}
+        # 自动从配置文件读取配置
+        self.api_url = CLASH_API_URL
+        self.secret = CLASH_SECRET
+        self._try_load_from_config()
+        
+        self.headers = {"Authorization": f"Bearer {self.secret}"} if self.secret else {}
         self.available_nodes = []
         self.current_node_idx = 0
-        self.api_url = CLASH_API_URL
-        self._auto_detect_port()
+        
+        # 优先使用配置的端口，如果连不上再探测
+        if not self._check_current_port():
+             self._auto_detect_port()
         self._init_nodes()
+
+    def _try_load_from_config(self):
+        """尝试从 Clash 配置文件自动读取端口和密钥"""
+        # 如果环境变量已指定，则优先使用环境变量，不再读取文件
+        if os.environ.get("CLASH_API_URL"):
+            logging.info(f"使用环境变量指定的 Clash API: {self.api_url}")
+            return
+
+        try:
+            user_home = os.path.expanduser("~")
+            config_path = os.path.join(user_home, ".config", "clash", "config.yaml")
+            
+            if os.path.exists(config_path):
+                logging.info(f"发现 Clash 配置文件: {config_path}")
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    import yaml
+                    config = yaml.safe_load(f)
+                    
+                    # 读取 external-controller
+                    if 'external-controller' in config:
+                        controller = config['external-controller']
+                        # 处理可能是 0.0.0.0 的情况，替换为 127.0.0.1
+                        if controller.startswith(':'):
+                            controller = f"127.0.0.1{controller}"
+                        elif controller.startswith('0.0.0.0:'):
+                            controller = controller.replace('0.0.0.0:', '127.0.0.1:')
+                        
+                        # 确保有 http 前缀
+                        if not controller.startswith('http'):
+                            self.api_url = f"http://{controller}"
+                        else:
+                            self.api_url = controller
+                        logging.info(f"  -> 自动读取到 API 地址: {self.api_url}")
+                        
+                    # 读取 secret
+                    if 'secret' in config:
+                        self.secret = config['secret']
+                        logging.info(f"  -> 自动读取到 API 密钥: {self.secret[:3]}***{self.secret[-3:]}")
+        except Exception as e:
+            logging.warning(f"尝试读取 Clash 配置文件失败: {e} (将使用默认配置)")
+
+    def _check_current_port(self):
+        """检查当前配置的端口是否可用"""
+        try:
+            resp = requests.get(f"{self.api_url}/version", headers=self.headers, timeout=1)
+            if resp.status_code == 200:
+                logging.info(f"Clash API 连接成功: {self.api_url}")
+                return True
+        except:
+            pass
+        return False
 
     def _auto_detect_port(self):
         """自动探测 Clash API 端口"""
-        common_ports = [12531, 9090, 9097, 7890] # 优先尝试探测到的 12531
+        common_ports = [3936, 9090, 7342, 5492, 10380, 9097, 7890, 6821, 12531, 12280] # 优先尝试已知端口
         current_port = int(self.api_url.split(':')[-1])
         if current_port not in common_ports:
             common_ports.insert(0, current_port)
@@ -113,6 +174,28 @@ clash = ClashController()
 
 # ----------------------------
 
+STATE_FILE = "fetch_progress.json"
+
+def load_progress():
+    """Load the last processed index from the state file."""
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, 'r') as f:
+                data = json.load(f)
+                return data.get('next_start_index', 0)
+        except Exception as e:
+            logging.warning(f"Failed to load progress file: {e}")
+            return 0
+    return 0
+
+def save_progress(index):
+    """Save the current progress index to the state file."""
+    try:
+        with open(STATE_FILE, 'w') as f:
+            json.dump({'next_start_index': index}, f)
+    except Exception as e:
+        logging.warning(f"Failed to save progress: {e}")
+
 # Load environment variables
 load_dotenv()
 
@@ -122,6 +205,41 @@ DB_PORT = os.getenv("POSTGRES_PORT", "5432")
 DB_NAME = os.getenv("POSTGRES_DB", "gra_env_db")
 DB_USER = os.getenv("POSTGRES_USER", "admin")
 DB_PASS = os.getenv("POSTGRES_PASSWORD", "secure_password_dev")
+
+def check_if_data_exists(conn, lat, lon, year):
+    """
+    Check if data for a specific year and location already exists in the database.
+    Optimized to use index on latitude, longitude and timestamp.
+    Now checks for COMPLETENESS (>8000 records) instead of just existence to fix partial data issues.
+    """
+    try:
+        cur = conn.cursor()
+        query = """
+        SELECT count(*)
+        FROM grid_weather_data 
+        WHERE latitude BETWEEN %s - 0.1 AND %s + 0.1
+          AND longitude BETWEEN %s - 0.1 AND %s + 0.1
+          AND timestamp >= %s AND timestamp <= %s;
+        """
+        # Create datetime objects for range query to utilize index
+        start_date = datetime(year, 1, 1)
+        end_date = datetime(year, 12, 31, 23, 59, 59)
+        
+        cur.execute(query, (lat, lat, lon, lon, start_date, end_date))
+        count = cur.fetchone()[0]
+        cur.close()
+        
+        # Consider complete if we have more than 8000 records (leap year is 8784, normal 8760)
+        # This handles the case where we have partial data (e.g. only 8 records)
+        if count > 0 and count <= 8000:
+             logging.info(f"  [PARTIAL DATA DETECTED] Year {year} has only {count} records. Will re-fetch.")
+             return False
+             
+        return count > 8000
+    except Exception as e:
+        # Don't fail the whole process, just assume not exists to be safe
+        logging.warning(f"Error checking existing data: {e}")
+        return False
 
 def get_db_connection():
     """Establish a connection to the PostgreSQL database."""
@@ -205,186 +323,204 @@ def fetch_grid_data(grid_points):
     url = "https://archive-api.open-meteo.com/v1/archive"
     
     # Process in chunks to avoid API limits (Open-Meteo accepts multiple points but keep it reasonable)
-    # Reducing chunk size to 5 points to minimize load per request.
-    chunk_size = 5 
+    # Increased chunk size to 10 for better efficiency
+    chunk_size = 10
 
     total_points = len(grid_points)
     print(f"DEBUG: Optimized Chunk size is {chunk_size}, Total points: {total_points}")
     
+    start_index = load_progress()
+    logging.info(f"Loaded progress: resuming from index {start_index}")
+    
     conn = get_db_connection()
     create_grid_table(conn)
     
-    for i in range(0, total_points, chunk_size):
-        chunk = grid_points.iloc[i:i+chunk_size]
-        lats = chunk['latitude'].tolist()
-        lons = chunk['longitude'].tolist()
-        
-        logging.info(f"Processing grid points chunk {i//chunk_size + 1}/{(total_points-1)//chunk_size + 1} ({len(chunk)} points)...")
-        
-        # Iterate by year to keep memory usage low and provide frequent feedback
-        start_year = 1990
-        end_year = 2023
-        
-        # 为了减轻单次请求负载，严格限制每次只请求 1 年的数据
-        for year in range(start_year, end_year + 1):
+    # Use tqdm for progress tracking
+    with tqdm(total=total_points, initial=start_index, desc="Processing Grid Points", unit="point") as pbar:
+        for i in range(start_index, total_points, chunk_size):
+            chunk = grid_points.iloc[i:i+chunk_size]
+            lats = chunk['latitude'].tolist()
+            lons = chunk['longitude'].tolist()
             
-            # Skip future dates if we are in the current year (adjust logic if needed)
-            if year > datetime.now().year:
-                break
+            chunk_idx = i//chunk_size + 1
+            total_chunks = (total_points-1)//chunk_size + 1
+            logging.info(f"Processing chunk {chunk_idx}/{total_chunks} ({len(chunk)} points)...")
+            
+            # Iterate by year to keep memory usage low and provide frequent feedback
+            start_year = 1990
+            end_year = 2023
+            
+            # 为了减轻单次请求负载，严格限制每次只请求 1 年的数据
+            for year in range(start_year, end_year + 1):
                 
-            logging.info(f"  Fetching data for year {year}...")
+                # Skip future dates if we are in the current year (adjust logic if needed)
+                if year > datetime.now().year:
+                    break
 
-            params = {
-                "latitude": lats,
-                "longitude": lons,
-                "start_date": f"{year}-01-01",
-                "end_date": f"{year}-12-31",
-                "hourly": [
-                    "temperature_2m", 
-                    "precipitation", 
-                    "et0_fao_evapotranspiration", 
-                    "soil_moisture_0_to_7cm",
-                    "relative_humidity_2m",
-                    "wind_speed_10m",
-                    "shortwave_radiation"
-                ]
-            }
-            
-            # Retry loop for API rate limits
-            max_retries = 5
-            retry_count = 0
-            success = False
-            
-            while retry_count < max_retries and not success:
-                try:
-                    responses = openmeteo_requests.Client(session = retry_session).weather_api(url, params=params)
-                    success = True # Mark as success if no exception
+                # --- INTELLIGENT SKIP CHECK ---
+                # Check if we already have data for this chunk (checking the first point is sufficient as a proxy)
+                if check_if_data_exists(conn, lats[0], lons[0], year):
+                    logging.info(f"  [SKIP] Data for year {year} already exists in DB. Skipping...")
+                    continue
                     
-                    all_records = []
-                    
-                    for j, response in enumerate(responses):
-                        lat = response.Latitude()
-                        lon = response.Longitude()
-                        
-                        # Process hourly data
-                        hourly = response.Hourly()
-                        hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
-                        hourly_precipitation = hourly.Variables(1).ValuesAsNumpy()
-                        hourly_et0 = hourly.Variables(2).ValuesAsNumpy()
-                        hourly_soil_moisture = hourly.Variables(3).ValuesAsNumpy()
-                        hourly_humidity = hourly.Variables(4).ValuesAsNumpy()
-                        hourly_wind_speed = hourly.Variables(5).ValuesAsNumpy()
-                        hourly_radiation = hourly.Variables(6).ValuesAsNumpy()
-                        
-                        hourly_data = {"date": pd.date_range(
-                            start = pd.to_datetime(hourly.Time(), unit = "s", utc = True),
-                            end = pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = True),
-                            freq = pd.Timedelta(seconds = hourly.Interval()),
-                            inclusive = "left"
-                        )}
-                        
-                        # Create DataFrame for easier handling
-                        df = pd.DataFrame(data = hourly_data)
-                        df["temperature"] = hourly_temperature_2m
-                        df["precipitation"] = hourly_precipitation
-                        df["et0"] = hourly_et0
-                        df["soil_moisture"] = hourly_soil_moisture
-                        df["humidity"] = hourly_humidity
-                        df["wind_speed"] = hourly_wind_speed
-                        df["radiation"] = hourly_radiation
-                        
-                        # Convert to list of tuples for DB insertion
-                        # Direct iteration to save memory
-                        for _, row in df.iterrows():
-                            all_records.append((
-                                lat, 
-                                lon, 
-                                row['date'], 
-                                float(row['temperature']), 
-                                float(row['precipitation']), 
-                                float(row['et0']), 
-                                float(row['soil_moisture']),
-                                float(row['humidity']),
-                                float(row['wind_speed']),
-                                float(row['radiation'])
-                            ))
-                    
-                    # Batch insert for this year
-                    if all_records:
-                        insert_query = """
-                        INSERT INTO grid_weather_data (
-                            latitude, longitude, timestamp, temperature, precipitation, 
-                            et0_fao_evapotranspiration, soil_moisture_0_to_7cm,
-                            relative_humidity_2m, wind_speed_10m, shortwave_radiation
-                        )
-                        VALUES %s
-                        ON CONFLICT (latitude, longitude, timestamp) DO NOTHING;
-                        """
-                        
-                        cur = conn.cursor()
-                        execute_values(cur, insert_query, all_records)
-                        conn.commit()
-                        cur.close()
-                        logging.info(f"  Inserted {len(all_records)} records for year {year} ({len(chunk)} points).")
-                    
-                    # Pause between years to stay under minutely rate limit (600/min)
-                    # 1 request per 1.2s = 50 requests per minute
-                    time.sleep(1.2)
+                logging.info(f"  Fetching data for year {year}...")
 
-                except Exception as e:
-                    error_msg = str(e)
-                    if "request limit exceeded" in error_msg or "429" in error_msg:
-                        logging.warning(f"Quota limit reached (API Error: {error_msg}). Automatically switching Clash node...")
+                params = {
+                    "latitude": lats,
+                    "longitude": lons,
+                    "start_date": f"{year}-01-01",
+                    "end_date": f"{year}-12-31",
+                    "hourly": [
+                        "temperature_2m", 
+                        "precipitation", 
+                        "et0_fao_evapotranspiration", 
+                        "soil_moisture_0_to_7cm",
+                        "relative_humidity_2m",
+                        "wind_speed_10m",
+                        "shortwave_radiation"
+                    ]
+                }
+                
+                # Retry loop for API rate limits
+                max_retries = 5
+                retry_count = 0
+                success = False
+                
+                while retry_count < max_retries and not success:
+                    try:
+                        responses = openmeteo_requests.Client(session = retry_session).weather_api(url, params=params)
+                        success = True # Mark as success if no exception
                         
-                        # 如果是 Minutely 限制，额外等待一段时间，给 API 喘息的机会
-                        if "Minutely" in error_msg:
-                            logging.info("检测到每分钟频率限制，额外冷却 15 秒...")
-                            time.sleep(15)
-
-                        # 自动尝试切换到下一个节点
-                        if clash.switch_to_next():
-                            # 延长等待时间，让新节点链路完全打通
-                            wait_time = 15
-                            logging.info(f"等待 {wait_time} 秒让新节点链路稳定...")
-                            time.sleep(wait_time)
+                        all_records = []
+                        
+                        for j, response in enumerate(responses):
+                            lat = response.Latitude()
+                            lon = response.Longitude()
                             
-                            # 验证新 IP
-                            try:
-                                # 增加验证时的重试
-                                for _ in range(3):
-                                    try:
-                                        new_ip = requests.get('https://api.ipify.org', proxies=cache_session.proxies, timeout=10).text
-                                        logging.info(f"新节点 IP 验证成功: {new_ip}")
-                                        break
-                                    except:
-                                        time.sleep(2)
-                            except:
-                                logging.warning("无法验证新 IP，但将尝试继续。")
+                            # Process hourly data
+                            hourly = response.Hourly()
+                            hourly_temperature_2m = hourly.Variables(0).ValuesAsNumpy()
+                            hourly_precipitation = hourly.Variables(1).ValuesAsNumpy()
+                            hourly_et0 = hourly.Variables(2).ValuesAsNumpy()
+                            hourly_soil_moisture = hourly.Variables(3).ValuesAsNumpy()
+                            hourly_humidity = hourly.Variables(4).ValuesAsNumpy()
+                            hourly_wind_speed = hourly.Variables(5).ValuesAsNumpy()
+                            hourly_radiation = hourly.Variables(6).ValuesAsNumpy()
                             
-                            # 重置重试计数并立即继续循环
-                            retry_count = 0
-                            continue
+                            hourly_data = {"date": pd.date_range(
+                                start = pd.to_datetime(hourly.Time(), unit = "s", utc = True),
+                                end = pd.to_datetime(hourly.TimeEnd(), unit = "s", utc = True),
+                                freq = pd.Timedelta(seconds = hourly.Interval()),
+                                inclusive = "left"
+                            )}
+                            
+                            # Create DataFrame for easier handling
+                            df = pd.DataFrame(data = hourly_data)
+                            df["temperature"] = hourly_temperature_2m
+                            df["precipitation"] = hourly_precipitation
+                            df["et0"] = hourly_et0
+                            df["soil_moisture"] = hourly_soil_moisture
+                            df["humidity"] = hourly_humidity
+                            df["wind_speed"] = hourly_wind_speed
+                            df["radiation"] = hourly_radiation
+                            
+                            # Convert to list of tuples for DB insertion
+                            # Direct iteration to save memory
+                            for _, row in df.iterrows():
+                                all_records.append((
+                                    lat, 
+                                    lon, 
+                                    row['date'], 
+                                    float(row['temperature']), 
+                                    float(row['precipitation']), 
+                                    float(row['et0']), 
+                                    float(row['soil_moisture']),
+                                    float(row['humidity']),
+                                    float(row['wind_speed']),
+                                    float(row['radiation'])
+                                ))
+                        
+                        # Batch insert for this year
+                        if all_records:
+                            insert_query = """
+                            INSERT INTO grid_weather_data (
+                                latitude, longitude, timestamp, temperature, precipitation, 
+                                et0_fao_evapotranspiration, soil_moisture_0_to_7cm,
+                                relative_humidity_2m, wind_speed_10m, shortwave_radiation
+                            )
+                            VALUES %s
+                            ON CONFLICT (latitude, longitude, timestamp) DO NOTHING;
+                            """
+                            
+                            cur = conn.cursor()
+                            execute_values(cur, insert_query, all_records)
+                            conn.commit()
+                            cur.close()
+                            logging.info(f"  Inserted {len(all_records)} records for year {year} ({len(chunk)} points).")
+                        
+                        # Pause between years to stay under minutely rate limit (600/min)
+                        # 1 request per 1.2s = 50 requests per minute
+                        time.sleep(1.2)
+
+                    except Exception as e:
+                        error_msg = str(e)
+                        if "request limit exceeded" in error_msg or "429" in error_msg:
+                            logging.warning(f"Quota limit reached (API Error: {error_msg}). Automatically switching Clash node...")
+                            
+                            # 如果是 Minutely 限制，额外等待一段时间，给 API 喘息的机会
+                            if "Minutely" in error_msg:
+                                logging.info("检测到每分钟频率限制，额外冷却 15 秒...")
+                                time.sleep(15)
+
+                            # 自动尝试切换到下一个节点
+                            if clash.switch_to_next():
+                                # 延长等待时间，让新节点链路完全打通
+                                wait_time = 15
+                                logging.info(f"等待 {wait_time} 秒让新节点链路稳定...")
+                                time.sleep(wait_time)
+                                
+                                # 验证新 IP
+                                try:
+                                    # 增加验证时的重试
+                                    for _ in range(3):
+                                        try:
+                                            new_ip = requests.get('https://api.ipify.org', proxies=cache_session.proxies, timeout=10).text
+                                            logging.info(f"新节点 IP 验证成功: {new_ip}")
+                                            break
+                                        except:
+                                            time.sleep(2)
+                                except:
+                                    logging.warning("无法验证新 IP，但将尝试继续。")
+                                
+                                # 重置重试计数并立即继续循环
+                                retry_count = 0
+                                continue
+                            else:
+                                # 如果自动切换失败，改为等待较长时间重试，而不是阻塞
+                                logging.error("自动切换节点失败！可能是没有可用节点或 Clash API 异常。")
+                                logging.info("将等待 300 秒 (5分钟) 后重试...")
+                                time.sleep(300)
+                                
+                                # 尝试重新初始化节点列表
+                                clash._init_nodes()
+                                
+                                retry_count += 1
+                                continue
                         else:
-                            # 如果自动切换失败（可能 API 配置有误），回退到手动模式
-                            print("\n" + "!"*50)
-                            print("自动切换节点失败！请检查 Clash API 配置。")
-                            print("手动切换后按下 [Enter] 键继续...")
-                            print("!"*50 + "\n")
-                            input(">>> 按下 Enter 键以继续...")
-                            retry_count = 0
-                            continue
-                    else:
-                        logging.error(f"Error processing chunk {i} for year {year}: {e}")
-                        break
+                            logging.error(f"Error processing chunk {i} for year {year}: {e}")
+                            break
             
-            if not success:
-                 logging.error(f"Failed to fetch data for year {year} after {max_retries} retries.")
+                if not success:
+                     logging.error(f"Failed to fetch data for year {year} after {max_retries} retries.")
             
-            # 即使成功了，也在年份之间加个小停顿，避免触发 Burst Limit
-            time.sleep(2)
+            # Update progress bar
+            pbar.update(len(chunk))
 
-        # Brief pause between chunks
-        time.sleep(2)
+            # Brief pause between chunks
+            time.sleep(1)
+            
+            # Save progress to checkpoint file
+            save_progress(i + len(chunk))
 
     conn.close()
     logging.info("Batch processing completed.")

@@ -70,10 +70,12 @@ def get_grid_recent():
     
     try:
         cur = conn.cursor()
-        # 获取最近插入的数据 (按 timestamp 倒序)
+        # 获取最近插入的数据 (按 id 倒序)
+        # 使用 id 而不是 timestamp，因为 timestamp 可能是历史时间，
+        # 而 id 是自增的，更能代表"最近抓取"的数据
         cur.execute("""
             SELECT * FROM grid_weather_data 
-            ORDER BY timestamp DESC 
+            ORDER BY id DESC 
             LIMIT 50
         """)
         rows = cur.fetchall()
@@ -116,6 +118,32 @@ def get_grid_stats():
         })
     except Exception as e:
         app.logger.error(f"Error querying grid stats: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/coverage_stats')
+def get_coverage_stats():
+    """获取按年份分组的数据覆盖情况。"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+    
+    try:
+        cur = conn.cursor()
+        # 按年份统计记录数
+        cur.execute("""
+            SELECT 
+                extract(year from timestamp)::int as year, 
+                count(*) as count 
+            FROM grid_weather_data 
+            GROUP BY year 
+            ORDER BY year ASC
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(rows)
+    except Exception as e:
+        app.logger.error(f"Error querying coverage stats: {e}")
         return jsonify({"error": str(e)}), 500
 
 from collections import deque
