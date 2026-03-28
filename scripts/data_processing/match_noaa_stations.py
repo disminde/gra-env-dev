@@ -1,5 +1,22 @@
 import pandas as pd
 import numpy as np
+import psycopg2
+import os
+import warnings
+from dotenv import load_dotenv
+
+# 忽略 pandas 关于 sqlalchemy 的警告，因为我们只是简单的读操作
+warnings.filterwarnings('ignore', category=UserWarning)
+
+def get_db_connection():
+    load_dotenv()
+    return psycopg2.connect(
+        host=os.getenv('POSTGRES_HOST', 'localhost'),
+        port=os.getenv('POSTGRES_PORT', '5432'),
+        dbname=os.getenv('POSTGRES_DB', 'gra_env_db'),
+        user=os.getenv('POSTGRES_USER', 'admin'),
+        password=os.getenv('POSTGRES_PASSWORD', 'secure_password_dev')
+    )
 
 def filter_ncp_noaa_stations(csv_path):
     """
@@ -44,43 +61,49 @@ def filter_ncp_noaa_stations(csv_path):
 
 def map_stations_to_grid(stations_df):
     """
-    为每个 NOAA 站点寻找最近的 Open-Meteo 网格点。
+    为每个 NOAA 站点寻找最近的真实 Open-Meteo 网格点。
+    网格点从 PostgreSQL 数据库中真实提取。
     """
-    print("生成华北平原网格点...")
-    # 模拟 batch_fetch_weather.py 中的网格生成逻辑
-    lat_min, lat_max = 32.0, 42.0
-    lon_min, lon_max = 110.0, 123.0
-    res = 0.25
+    print("从数据库中提取真实的华北平原网格点...")
     
-    lats = np.arange(lat_min, lat_max + res, res)
-    lons = np.arange(lon_min, lon_max + res, res)
-    
-    grid_points = []
-    for lat in lats:
-        for lon in lons:
-            grid_points.append({'latitude': lat, 'longitude': lon})
-    
-    grid_df = pd.DataFrame(grid_points)
-    
+    try:
+        conn = get_db_connection()
+        # 从数据库中提取唯一存在的网格点
+        query = "SELECT DISTINCT latitude, longitude FROM grid_weather_data"
+        grid_df = pd.read_sql(query, conn)
+        conn.close()
+        
+        if grid_df.empty:
+            print("错误: 从数据库中未能读取到任何网格点，请确保 grid_weather_data 表中有数据。")
+            return
+            
+        print(f"成功从数据库提取了 {len(grid_df)} 个真实网格点。")
+    except Exception as e:
+        print(f"数据库连接或查询失败: {e}")
+        return
+
     mapping = []
+    
+    # 将网格点的经纬度转换为 numpy 数组，加速距离计算
+    grid_lats = grid_df['latitude'].values
+    grid_lons = grid_df['longitude'].values
     
     for _, station in stations_df.iterrows():
         s_lat = station['LAT']
         s_lon = station['LON']
         
         # 计算欧氏距离 (近似)
-        dist = np.sqrt((grid_df['latitude'] - s_lat)**2 + (grid_df['longitude'] - s_lon)**2)
-        nearest_idx = dist.idxmin()
-        nearest_grid = grid_df.iloc[nearest_idx]
+        dist = np.sqrt((grid_lats - s_lat)**2 + (grid_lons - s_lon)**2)
+        nearest_idx = np.argmin(dist)
         
         mapping.append({
             'station_id': f"{station['USAF']}-{station['WBAN']}",
             'station_name': station['STATION NAME'],
             'station_lat': s_lat,
             'station_lon': s_lon,
-            'grid_lat': nearest_grid['latitude'],
-            'grid_lon': nearest_grid['longitude'],
-            'distance_deg': dist.min()
+            'grid_lat': grid_lats[nearest_idx],
+            'grid_lon': grid_lons[nearest_idx],
+            'distance_deg': dist[nearest_idx]
         })
     
     mapping_df = pd.DataFrame(mapping)

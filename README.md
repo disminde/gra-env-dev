@@ -116,13 +116,13 @@
 
 ### 启动 Web 应用
 ```bash
-streamlit run app.py
+python app.py
 ```
-访问浏览器 `http://localhost:8501` 即可查看系统界面。
+访问浏览器 `http://localhost:5000` 即可查看系统界面。
 
 ### 启动数据采集任务
 ```bash
-python scripts/data_collection.py
+python fetch_weather.py
 ```
 
 ## 5. 贡献指南（真的会有人贡献吗）

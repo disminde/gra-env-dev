@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  gpu_trainer:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: gra_env_gpu_trainer
+    # This enables GPU passthrough in Docker Desktop (WSL2)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      # Mount the entire project root to /app in the container
+      - ../../:/app
+    # Set environment variables for the container
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - POSTGRES_HOST=host.docker.internal # Allows container to connect to Postgres on Windows host
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=gra_env_db
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=secure_password_dev
+    # Keep the container running in the background
+    command: tail -f /dev/null

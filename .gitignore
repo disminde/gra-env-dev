@@ -148,9 +148,36 @@ Thumbs.db
 .cache.sqlite
 
 # Project specific ignores
-data/noaa_raw/
+# Data files (too large for git)
+data/raw/*.csv
+data/raw/noaa/
+data/processed/
+data/external/
+
+# Logs
+logs/
+*.log
+
+# Migration temp files
+migration_package/
+*.zip
+
+# Database backups
 database_backup/
+
+# Crawler files
 fetch_progress.json
 batch_fetch.log
 crawler_config.yaml
 crawler_clash.log
+
+# Project specific unneeded files
+*.txt
+*.png
+*.jpg
+*.csv
+!station_grid_mapping.csv
+*.bat
+*.ps1
+notes/
+models/

@@ -151,7 +151,7 @@ from collections import deque
 @app.route('/api/fetch_log')
 def get_fetch_log():
     """获取数据爬取日志的最后几行。"""
-    log_file = "batch_fetch.log"
+    log_file = "weather_fetch.log"
     if not os.path.exists(log_file):
         return jsonify({"log": "Log file not found."})
         

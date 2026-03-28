@@ -1,0 +1,57 @@
+{
+  "completed_batches": [
+    {
+      "batch_num": 1,
+      "start_year": 1990,
+      "end_year": 1994,
+      "start_time": "2026-03-16T16:45:55.850560",
+      "end_time": "2026-03-16T16:46:44.401443"
+    },
+    {
+      "batch_num": 2,
+      "start_year": 1995,
+      "end_year": 1999,
+      "start_time": "2026-03-16T16:46:44.403024",
+      "end_time": "2026-03-16T16:47:31.863023"
+    },
+    {
+      "batch_num": 3,
+      "start_year": 2000,
+      "end_year": 2004,
+      "start_time": "2026-03-16T16:47:31.866242",
+      "end_time": "2026-03-16T16:48:26.791648"
+    },
+    {
+      "batch_num": 4,
+      "start_year": 2005,
+      "end_year": 2009,
+      "start_time": "2026-03-16T16:48:26.795166",
+      "end_time": "2026-03-16T16:49:28.520203"
+    },
+    {
+      "batch_num": 5,
+      "start_year": 2010,
+      "end_year": 2014,
+      "start_time": "2026-03-16T16:49:28.522717",
+      "end_time": "2026-03-16T16:50:28.296330"
+    },
+    {
+      "batch_num": 6,
+      "start_year": 2015,
+      "end_year": 2019,
+      "start_time": "2026-03-16T16:50:28.299622",
+      "end_time": "2026-03-16T16:51:25.925239"
+    },
+    {
+      "batch_num": 7,
+      "start_year": 2020,
+      "end_year": 2023,
+      "start_time": "2026-03-16T16:51:25.926242",
+      "end_time": "2026-03-16T16:52:13.205257"
+    }
+  ],
+  "failed_batches": [],
+  "current_batch": null,
+  "start_time": "2026-03-16T16:45:55.847930",
+  "end_time": "2026-03-16T16:52:13.865010"
+}
