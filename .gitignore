@@ -181,3 +181,10 @@ crawler_clash.log
 *.ps1
 notes/
 models/
+
+# Large data and model files
+*.pth
+*.parquet
+convlstm_results/
+rf_experiment_results/
+
